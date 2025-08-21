@@ -4,7 +4,7 @@ This project is an **AI-powered agentic chatbot** that helps you manage your [Tr
 With natural language commands, you can search for movies, get details, and update your Trakt.tv watchlist seamlessly.
 
 [Watch the demo video](https://www.youtube.com/watch?v=iJgqI5_qwdc)  
-<iframe width="560" height="315" src="https://www.youtube.com/watch?v=iJgqI5_qwdc" frameborder="0" allowfullscreen></iframe>
+[![Watch the demo](https://img.youtube.com/vi/iJgqI5_qwdc/hqdefault.jpg)](https://www.youtube.com/watch?v=iJgqI5_qwdc)
 
 ---
 
