@@ -5,6 +5,7 @@ from typing import List, Dict
 from agent.logic.actions.get_actions import (
     GetTrending,
     GetMovieDetails,
+    GetRelatedMovies,
     GetUserList
 )
 from agent.logic.actions.post_actions import (
@@ -42,18 +43,33 @@ action_dict = {
             "year": "(opt)",
             "trakt_id": "(opt)",
         },
-        "immediate_arg_notes": "One of 'title' or 'trakt_id' required. Always trakt id if you have it.",
+        "immediate_arg_notes": None, # "One of 'title' or 'trakt_id' required.",
         "follow_up_func": GetMovieDetails.get_movie_details,
         "follow_up_args": {
-            "title": "str (opt) - movie title",
-            "trakt_id": "int (opt) - id of movie on trakt.tv"
+            "title": "str (opt)",
+            "trakt_id": "int (opt)"
         },
         "final_func": GetMovieDetails.get_movie_details,
-        "final_arg_notes": "One of 'title' or 'trakt_id' required. Always trakt id if you have it.",
+        "final_arg_notes": None, # "One of 'title' or 'trakt_id' required.",
+        "final_arg_notes": None,
+    },
+    "GetSimilar": {
+        "description": "Get related movies to provided search movie.",
+        "immediate_args": {
+            "title": "(opt)",
+            "year": "(opt)",
+            # "trakt_id": "(opt)",
+            "num": "(opt)",
+        },
+        "immediate_arg_notes": "One of 'title' or 'trakt_id' required.",
+        "follow_up_func": None,
+        "follow_up_args": None,
+        "final_func": GetRelatedMovies.get_related_list,
+        "final_arg_notes": None, # "One of 'title' or 'trakt_id' required.",
         "final_arg_notes": None,
     },
     "GetUserList": {
-        "description": "get trakt.tv user lists",
+        "description": "get list of movies (i.e. user's watchlist)",
         "immediate_args": {
             "list_type": "(req)",
             "limit": "(opt)",
@@ -77,14 +93,14 @@ action_dict = {
     "AddOrRemoveFromWatchList": {
         "description": "Update user watchlist for a single movie",
         "immediate_args": {
-            "title": "(opt)",
-            "trakt_id": "(opt)",
+            "title": "(req)",
+            # "trakt_id": "(opt)",
             "mode": "(opt)",
         },
         "immediate_arg_notes": None,
         "follow_up_args": {
-            "title": "(opt)",
-            "trakt_id": "(opt)",
+            "title": "(req)",
+            # "trakt_id": "(opt)",
             "mode": "(opt)",
         },
         "follow_up_func": None,
@@ -96,7 +112,7 @@ action_dict = {
 default_arg_desc= {
     "title (str)": "best guess movie title (**never** include year). If unknown to you rely on user input",
     "year (int)": "movie release year",
-    "trakt_id (int)": "trakt.tv movie id",
+    # "trakt_id (int)": "trakt.tv movie id. Only include if already exists in previous message. Never fill if you don't know it.",
     "num (int)": "num movies",
     "limit (int)": "max movies, max=15",
     "list_type (str)": "one of ['watchlist','collection','ratings','history']",
@@ -124,22 +140,26 @@ def build_action_router_prompt():
     actions_text = "\n".join(action_lines)
 
     return f"""
-    You are a router for a movie recommendation agent.
+    You are a router for a movie recommendation agent. Your task is to select **one action** to perform based on the last two messages, prioritizing the **most recent message**.
 
-    Examine the message history and choose **one** of
-    the following **actions** to trigger based on the context of up to 3 of the
-    most recent messages.
+    You **must respond only** with a single JSON object with two keys:
+    - "action" (string): the name of the chosen action
+    - "args" (object): arguments for the action (empty object if no arguments)
+
+    Rules:
+    1. Never include any extra text, commentary, or explanations.
+    2. Never embed the JSON inside natural language.
+    3. Always ensure a valid JSON object is returned — no partial JSON or explanations.
+    4. Only use natural language **if and only if you cannot determine an action** from the user's most recent message.
+    5. You may receive "HIDDEN MEMORY" JSONs. These are for your reference. Do not pass them in the response text.
+    6. Never make up trakt.tv ID numbers. Only retrieve them from previous messages if they match a target movie.
+    
+    These are your actions:
 
     {actions_text}
     
     Arg details:
     {str(default_arg_desc)}
-
-    Reply **only** by returning a JSON with the keys...
-    - "action" str: chosen action name
-    - "args" dict: arguments for function (empty if none)
-    
-    ONLY resort to other text if there is absolutely no action match.
     """.strip()
     #     If you cannot map the user request to any action, forget about actions
     # and reply with plain text.
@@ -161,7 +181,7 @@ def route(history: list[dict]) -> dict:
     """
     user_prompt = history[-1]["content"] if history and history[-1]["role"] == "user" else ""
 
-    # 1. Router picks action + args
+    # -- Router picks action + args
     router_resp = invoke_claude(
         prompt=user_prompt,
         system_prompt=SYSTEM_PROMPT,
@@ -179,16 +199,18 @@ def route(history: list[dict]) -> dict:
     if action not in action_dict:
         return {"fallback": f"Unknown action '{action}'. Got: {router_text}"}
 
+    print(f"SELECTED ACTION '{action}'")
+
     config = action_dict[action]
     follow_up_args = config.get("follow_up_args", {})
     follow_up_func = config.get("follow_up_func")
     final_func = config["final_func"]
 
-    # 2. Call follow_up_func if present
+    # -- Call follow_up_func if present
     if follow_up_func:
         action_result = follow_up_func(**selected_args) if selected_args else follow_up_func()
 
-        print("follow_up_result is", action_result)
+        print("follow_up action_result is", action_result)
 
         status = action_result.get("status")
         if status == "secondary_query_required":
@@ -217,8 +239,9 @@ def route(history: list[dict]) -> dict:
         else:
             return {"status": "error", "prompt": f"Unknown status '{status}' from follow_up_func."}
 
-    # 4. No follow-up func → go straight to final_func
+    # -- If no follow-up func → go straight to final_func
     action_result = final_func(**selected_args) if selected_args else final_func()
+    print("non-followup action_result is", action_result)
     return _build_success_response(action, action_result, config)
 
 
@@ -260,7 +283,7 @@ def silent_query_for_follow_up_args(
 
 def _build_success_response(
     action: str,
-    action_result: dict,
+    action_result,
     config: dict
 ) -> dict:
     """Helper to build the final 'success' response structure."""
@@ -272,8 +295,8 @@ def _build_success_response(
     if config.get("final_arg_notes"):
         action_prompt += f"\narg notes: {config.get('final_arg_notes')}"
 
-    print("action_prompt is")
-    print(action_prompt)
+    print(f"action_result is ({type(action_result)})")
+    print(action_result)
 
     return {
         "status": "success",

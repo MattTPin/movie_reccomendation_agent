@@ -1,7 +1,7 @@
 # get_actions.py
 from typing import Literal, List, Optional, Tuple
 
-from agent.models import Movie, MovieList, generate_system_prompt_from_model_instance
+from agent.models import Movie, MovieList, TraktListActionResult, generate_system_prompt_from_model_instance
 from agent.logic.services.tmdb import (
     _get_genre_map,
     get_tmdb_movie,
@@ -11,6 +11,7 @@ from agent.logic.services.trakt.get_movies import (
     query_top_trakt_movies,
     search_trakt_movie,
     query_trakt_movie,
+    query_related_movies,
 )
 from agent.logic.services.trakt.trakt_lists import query_user_trakt_list
 
@@ -245,13 +246,90 @@ class GetMovieDetails:
             "action_prompt": None
         }
         
+class GetRelatedMovies:
+    action_prompt_template = """
+        You are a helpful movie information agent. You will be provided with a JSON list
+        of movies similar to '{+title+}', which the user is interested in.
+
+        For each movie, write a short, engaging summary using only the data in the JSON.
+
+        Format as a numeric list with a nice divide between metadata and description.
+
+        Present metadata inline like a movie capsule with (runtime, rating, release_date).
+        
+        Director and cast (if included) can be on one line.
+        
+        Then a description line. Abridge what is provided. Weave in interesting metadata like country,
+        genres, tagline, or director as flavor text—not bullet points.
+        
+        If a trailer is provided always put the raw url as the last line for that movie.
+
+        Here is an example of the input json.
+
+        {+json+}
+    """
+    
+    @staticmethod
+    def get_related_list(
+        title: str = None,
+        trakt_id: int = None,
+        year: int = None,
+        num: int = 3,
+    ) -> dict:
+        """
+        Returns a dictionary with:
+            - model_instance: The MovieList Pydantic model
+            - action_prompt: The generated summary prompt for the movies
+        """
+        if not title and not trakt_id:
+            return {
+                "status": "error",
+                "model_instance": MovieList(
+                    movies = [Movie(title=None)]
+                ),
+                "action_prompt": "Tell the user no action can be performed without a movie title.",
+            }
+        
+        
+        # Pass parameters explicitly to match query_user_trakt_list
+        result = query_related_movies(
+            limit=10,
+            num=num,
+            title=title,
+            year=year,
+            trakt_id=trakt_id,
+        )
+        
+        # --- Determine which MovieList instance to pass to generate_system_prompt_from_model_instance ---
+        if result['status'] == "success":
+            model_instance = result.get("similar_movies", MovieList())
+        elif result['status'] == "search_movie_has_many_matches":
+            # If there are multiple potential matches, pass them as a MovieList
+            potential_matches = result.get("search_movie_potential_matches", [])
+            model_instance = MovieList(movies=potential_matches)
+        else:
+            # For any other status, pass an empty MovieList
+            model_instance = MovieList()
+
+        # --- Generate the action prompt using the chosen model instance ---
+        action_prompt = generate_system_prompt_from_model_instance(
+            action_prompt_template=GetRelatedMovies.action_prompt_template,
+            model_instance=model_instance
+        )
+        
+        result['action_prompt'] = action_prompt
+
+        return result
+
 
 class GetUserList:
     action_prompt_template = """
         You are a helpful movie information agent. You will be provided with a JSON list
-        of the movies in a user's {+list_type+} list
+        of the movies in a user's {+list_type+} list.
 
         For each movie, write a short, engaging summary using only the data in the JSON.
+        
+        Never allude to the json or display your hidden memory or action prompts!
 
         Format as a numeric list with a nice divide between metadata and description.
 
@@ -312,6 +390,7 @@ class GetUserList:
         dedent(action_prompt).replace("{+list_type+}", list_type)
 
         return {
+            "status": "success",
             "model_instance": movie_list,
             "action_prompt": action_prompt
         }

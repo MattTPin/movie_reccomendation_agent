@@ -9,7 +9,7 @@ from typing import List, Dict
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from agent.models import TraktActionResult
+from agent.models import TraktListActionResult
 from agent.logic.services.trakt.get_movies import query_trakt_movie
 from agent.logic.services.trakt.trakt_lists import update_trakt_list
 
@@ -29,7 +29,7 @@ class TestUpdateTraktList:
             target_list="watchlist",
             mode="add"
         )
-        assert isinstance(result, TraktActionResult)
+        assert isinstance(result, TraktListActionResult)
         assert result.target_list == "watchlist"
         assert any(INCEPTION_TITLE in msg for msg in result.message.splitlines())
 
@@ -41,7 +41,7 @@ class TestUpdateTraktList:
     #         target_list="watchlist",
     #         mode="add"
     #     )
-    #     assert isinstance(result, TraktActionResult)
+    #     assert isinstance(result, TraktListActionResult)
     #     assert result.action_success is True
     #     assert BATMAN_BEGINS_TITLE in result.successfully_updated_titles
 

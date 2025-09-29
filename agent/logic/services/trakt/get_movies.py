@@ -93,10 +93,6 @@ def query_trakt_movie(
             response = future.result()
             response.raise_for_status()
             results[key] = response.json()
-          
-    print("------extra query results is--------")
-    print(results)
-    print("\n---------")
             
     # # Trim down number of comments
     # if "comments" in results:
@@ -164,7 +160,7 @@ def search_trakt_movie(
     if not results:
         return {"status": "no_match", "movie": None, "potential_matches": MovieList(), "match_score": 0.0}
 
-    # Step 1: Score top N results
+    # -- Score top N results
     scored_results = []
     for result in results[:max_results_to_check]:
         movie = result.get("movie")
@@ -176,11 +172,11 @@ def search_trakt_movie(
     if not scored_results:
         return {"status": "no_match", "movie": None, "potential_matches": MovieList(), "match_score": 0.0}
 
-    # Step 2: Sort by best ratio
+    # -- Sort by best match ratio
     scored_results.sort(key=lambda x: x[0], reverse=True)
     best_ratio, best_movie = scored_results[0]
 
-    # Step 3: Check for multiple very close matches
+    # -- Check for multiple very close matches
     close_matches = [m for r, m in scored_results if r >= (best_ratio - 0.05) and r >= 0.8]  # within 5% & high score
     if len(close_matches) > 1:        
         # Match by year if provided and only one entry aligns
@@ -214,7 +210,7 @@ def search_trakt_movie(
                 "match_score": None
             }
 
-    # Step 4: Single best match
+    # -- Select single best match
     trakt_id = best_movie["ids"].get("trakt")
     if not trakt_id:
         return {"status": "no_match", "movie": None, "potential_matches": [], "match_score": None}
@@ -332,3 +328,90 @@ def query_top_trakt_movies(
         movies.append(Movie(**mapped))
 
     return MovieList(movies=movies)
+
+
+def query_related_movies(
+    num: int = 3,
+    limit: int = 10,
+    title: Optional[str] = None,
+    year: int = None,
+    trakt_id: Optional[int] = None,
+) -> dict:
+    """
+    Fetch a list of related movies from Trakt for a given movie.
+
+    If `trakt_id` is not provided, the function will look up the movie by `title`.
+
+    Args:
+        num: Number of related movies to fetch (max 10).
+        title: Title of the movie to find related movies for (used if trakt_id is not provided).
+        trakt_id: Trakt ID of the movie.
+
+    Returns:
+        dict: {
+            "status": "success" | "candidate_title_not_found" | "could_not_choose_candidate",
+            "movie": Movie object for the original movie (or None),
+            "similar_movies": MovieList containing related movies
+        }
+    """
+    num = min(num, limit)
+    search_movie = None
+
+    # --- Resolve trakt_id from title if needed ---
+    if not trakt_id:
+        queried_movie = query_trakt_movie(title=title, year=year) if title else None
+        if not queried_movie:
+            return {
+                "status": "no_match",
+                "message": f"No match in trakt.tv could be found for the provided title '{title}'",
+                "search_movie": None,
+                "similar_movies": MovieList(),
+            }
+
+        if queried_movie['status'] == "match":
+            trakt_id = queried_movie['movie'].trakt_id
+            title = queried_movie['movie'].title
+            year = queried_movie['movie'].year
+            search_movie = queried_movie['movie']
+        else:
+            return {
+                "status": "search_movie_has_many_matches",
+                "message": f"Too many potential matches for search movie. Are they any of these? Try again with more specific title",
+                "search_movie": None,
+                "model_instance": queried_movie.get('potential_matches'),
+            }
+
+    # --- Fetch related movies from Trakt API ---
+    related_resp = requests.get(
+        f"{TRAKT_URL}/movies/{trakt_id}/related",
+        headers=HEADERS,
+        params={"limit": num},
+    )
+    related_resp.raise_for_status()
+    related_movies_json = related_resp.json()
+
+    related_movies_list = [
+        Movie(
+            title=m.get("title"),
+            original_title=m.get("title"),
+            year=m.get("year"),
+            trakt_id=m["ids"]["trakt"],
+            genres=m.get("genres", []),
+            tagline=m.get("tagline"),
+            description=m.get("overview"),
+            runtime=m.get("runtime"),
+            trailer=m.get("trailer"),
+        )
+        for m in related_movies_json[:num]
+    ]
+    
+    print("related_movies_list is", related_movies_list)
+
+    similar_movies = MovieList(movies=related_movies_list)
+
+    return {
+        "status": "success" if related_movies_list else "no_related_movies",
+        "message": "Found list of movies similar to search_movie!",
+        "search_movie": search_movie,
+        "model_instance": similar_movies,
+    }

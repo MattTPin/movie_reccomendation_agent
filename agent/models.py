@@ -99,15 +99,18 @@ class MovieList(BaseModel):
         movie_example_dict = Movie.example(include_optional=include_optional)
         return cls(movies=[Movie(**movie_example_dict)])
 
-    def get_example_from_instance(self) -> "MovieList":
+    def get_example_from_instance(self) -> dict:
         if not self.movies:
-            return self.__class__.example(include_optional=[])
-        return self.__class__.example(instance=self)
+            example = self.__class__.example(include_optional=[])
+        else:
+            example = self.__class__.example(instance=self)
+        # Convert to dict for JSON serialization
+        return example.model_dump()  # Pydantic v2
     
     
     
 # Action management models
-class TraktActionResult(BaseModel):
+class TraktListActionResult(BaseModel):
     action_name: str                      # e.g., "add_to_list", "rate_movies"
     target_list: str                      # e.g., "watchlist", "collection", "ratings"
     action_success: bool

@@ -2,20 +2,7 @@
 from typing import Literal, List
 
 from agent.models import (
-    Movie,
-    MovieList,
-    TraktActionResult,
-    generate_system_prompt_from_model_instance
-)
-from agent.logic.services.tmdb import (
-    _get_genre_map,
-    get_tmdb_movie,
-    query_tmdb_trending_movies
-)
-from agent.logic.services.trakt.get_movies import (
-    query_top_trakt_movies,
-    search_trakt_movie,
-    query_trakt_movie,
+    TraktListActionResult,
 )
 from agent.logic.services.trakt.trakt_lists import (
     update_trakt_list
@@ -25,11 +12,11 @@ from agent.logic.services.trakt.trakt_lists import (
 class AddOrRemoveFromWatchList:
     post_action_prompt_template = f"""
     You are a helpful movie agent. You just helped a user perform an action where they added
-    (or removed) movies from their trakt.tv
+    (or removed) movies from their trakt.tv. Respond in natural language based on the result
+    of the action based on the info in the json. Do not show the json or allude to it existing
+    in your response. Do not show any "hidden memory".
     
-    The status of this action and its success is summarized in the provided JSON.
-    
-    After reporting on the success of the action if there's any other ways you can be of assistance
+    After reporting on the success of the action ask if there's any other ways you can be of assistance
     in finding movies or adding them to their watchlist.
     """
 
@@ -46,14 +33,14 @@ class AddOrRemoveFromWatchList:
         Returns a dictionary matching the format of GetMovieDetails:
             {
                 "status": "success" | "error",
-                "model_instance": TraktActionResult,
+                "model_instance": TraktListActionResult,
                 "action_prompt": str
             }
         """
         if not title and not trakt_id:
             return {
                 "status": "error",
-                "model_instance": TraktActionResult(
+                "model_instance": TraktListActionResult(
                     action_name=f"{mode}_to_list",
                     target_list="watchlist",
                     action_success=False,
@@ -65,11 +52,13 @@ class AddOrRemoveFromWatchList:
             }
 
         # Call the update_trakt_list function
-        result: TraktActionResult = update_trakt_list(
+        result: TraktListActionResult = update_trakt_list(
             movies=[{"title": title, "trakt_id": trakt_id}],
             target_list="watchlist",
             mode=mode,
         )
+        
+        print(f"result is ({type(result)})", result)
 
         # Build response dict in same shape as GetMovieDetails
         return {

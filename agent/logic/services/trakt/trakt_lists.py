@@ -4,7 +4,7 @@ import requests
 from typing import Optional, Set, List, Tuple, Dict,Literal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from agent.models import Movie, MovieList, TraktActionResult
+from agent.models import Movie, MovieList, TraktListActionResult
 from agent.config import (
     TRAKT_URL,
     TRAKT_CLIENT_ID,
@@ -29,7 +29,7 @@ def update_trakt_list(
     trakt_id: int = None,
     target_list: Literal["watchlist", "collection", "ratings", "history", "comments"] = "watchlist",
     mode: Literal["add", "remove"] = "add"
-) -> TraktActionResult:
+) -> TraktListActionResult:
     """
     Add or remove one or more movies from a given Trakt list.
 
@@ -41,7 +41,7 @@ def update_trakt_list(
         mode: "add" or "remove".
 
     Returns:
-        TraktActionResult summarizing success/failure, updated titles, error titles, messages, and API response.
+        TraktListActionResult summarizing success/failure, updated titles, error titles, messages, and API response.
     """
     action_name = f"{mode}_to_list"
     added_or_removed_titles: List[str] = []
@@ -49,28 +49,29 @@ def update_trakt_list(
     trakt_movies_payload: List[Dict] = []
     per_movie_messages: List[str] = []
 
-    # 1) Normalize input into a movies list
+    # --- Normalize input into a movies list
     if not movies:
         movies = [{"title": title, "trakt_id": trakt_id}]
 
-    # 2) Resolve trakt_id for each movie (via title lookup if needed)
+    # --- Resolve trakt_id for each movie (via title lookup if needed)
     for movie in movies:
         trakt_id = movie.get("trakt_id")
         title = movie.get("title")
 
         if not trakt_id:
-            resolved = query_trakt_movie(title=title) if title else None
-            if not resolved:
+            queried_movie = query_trakt_movie(title=title) if title else None
+            if not queried_movie:
                 failed_titles.append(title or "Unknown title")
-                per_movie_messages.append(f"❌ Could not find '{title or 'Unknown title'}' on Trakt.")
+                per_movie_messages.append(f"Could not find '{title or 'Unknown title'}' on Trakt.")
                 continue
 
-            if resolved['status'] == "match":
-                trakt_id = resolved['movie'].trakt_id
-                movie["title"] = resolved['movie'].title
+            if queried_movie['status'] == "match":
+                trakt_id = queried_movie['movie'].trakt_id
+                movie["title"] = queried_movie['movie'].title
                 movie["trakt_id"] = trakt_id
             else:
-                return resolved  # error passthrough from query_trakt_movie
+                print(f"Returning queried movie ({type(queried_movie)})", queried_movie)
+                return queried_movie['potential_matches']  # error passthrough from query_trakt_movie
 
         # Build Trakt movie payload
         trakt_movie_data = {"ids": {"trakt": trakt_id}}
@@ -82,69 +83,57 @@ def update_trakt_list(
         trakt_movies_payload.append(trakt_movie_data)
 
     if not trakt_movies_payload:
-        return TraktActionResult(
+        return TraktListActionResult(
             action_name=action_name,
             target_list=target_list,
             action_success=False,
             successfully_updated_titles=[],
             non_updated_error_titles=failed_titles,
-            message="No valid movies could be processed for this action."
+            message=f"No valid movies could be found with the provided title."
         )
 
-    # 3) POST to Trakt API
+    # --- POST to Trakt API
     endpoint = (
         f"{TRAKT_URL}/sync/{target_list}"
         if mode == "add"
-        else f"{TRAKT_URL}/sync/remove"
+        else f"{TRAKT_URL}/sync/{target_list}/remove"
     )
     post_resp = requests.post(endpoint, headers=HEADERS, json={"movies": trakt_movies_payload})
     post_resp.raise_for_status()
     resp_json = post_resp.json()
 
-    # 4) Normalize response into consistent lists
-    def ensure_list(maybe):
-        """Ensure Trakt response part is always a list of dicts."""
-        if isinstance(maybe, list):
-            return maybe
-        return []  # if int, None, or unexpected
+    action_key = "added" if mode == "add" else "deleted"
+    # --- Check only movies, in priority order ---
+    action_key = "added" if mode == "add" else "deleted"
 
-    added_key = "added" if mode == "add" else "deleted"
-    added_movies_list = ensure_list(resp_json.get(added_key, {}).get("movies"))
-    existing_movies = ensure_list(resp_json.get("existing", {}).get("movies"))
-    not_found_movies = ensure_list(resp_json.get("not_found", {}).get("movies"))
+    actioned_movies = resp_json.get(action_key, {}).get("movies")
+    existing_movies = resp_json.get("existing", {}).get("movies")
+    not_found_movies = resp_json.get("not_found", {}).get("movies")
 
-    # 5) Per-movie result evaluation
-    for movie in movies:
-        title = movie["title"]
-        trakt_id = movie["trakt_id"]
+    if isinstance(actioned_movies, int) and actioned_movies > 0:
+        title = movies[0].get("title")
+        verb = "added to" if mode == "add" else "removed from"
+        final_message = f"Successfully {verb} {target_list}: '{title}'."
+        success = True
 
-        # Success check
-        if trakt_id in [m.get("trakt") for m in added_movies_list if isinstance(m, dict)]:
-            added_or_removed_titles.append(title)
-            verb = "added to" if mode == "add" else "removed from"
-            per_movie_messages.append(f"✅ Successfully {verb} {target_list}: '{title}'.")
+    elif isinstance(existing_movies, int) and existing_movies > 0:
+        title = movies[0].get("title")
+        final_message = f"ℹ '{title}' is already in your {target_list}. No action taken."
+        success = True
+
+    elif isinstance(not_found_movies, list) and not_found_movies:
+        title = movies[0].get("title")
+        if mode == "add":
+            final_message = f"Failed to add '{title}' to {target_list} — not found."
         else:
-            if title in failed_titles:
-                continue
+            final_message = f"ℹ '{title}' was not found in your {target_list}, so it couldn't be removed."
+        success = False
 
-            if mode == "add":
-                if trakt_id in [m.get("trakt") for m in existing_movies if isinstance(m, dict)]:
-                    per_movie_messages.append(f"ℹ '{title}' is already in your {target_list}. No action taken.")
-                else:
-                    per_movie_messages.append(f"❌ Failed to add '{title}' to {target_list} for an unknown reason.")
-            else:  # remove
-                if trakt_id in [m.get("trakt") for m in not_found_movies if isinstance(m, dict)]:
-                    per_movie_messages.append(f"ℹ '{title}' was not found in your {target_list}, so it couldn't be removed.")
-                else:
-                    per_movie_messages.append(f"❌ Failed to remove '{title}' from {target_list} for an unknown reason.")
+    else:
+        final_message = "No movies affected."
+        success = False
 
-            failed_titles.append(title)
-
-    # 6) Build final result
-    success = len(added_or_removed_titles) > 0
-    final_message = "\n".join(per_movie_messages)
-
-    return TraktActionResult(
+    return TraktListActionResult(
         action_name=action_name,
         target_list=target_list,
         action_success=success,
@@ -198,9 +187,7 @@ def query_user_trakt_list(
     """
     limit = min(limit, 100)  # API limit safeguard
 
-    # -----------------------------
-    # 1) Determine endpoint
-    # -----------------------------
+    # --- Determine endpoint
     endpoint_map = {
         "watchlist": "sync/watchlist/movies",
         "collection": "sync/collection/movies",
@@ -217,7 +204,7 @@ def query_user_trakt_list(
     response.raise_for_status()
     data = response.json()
     
-    # 2) Apply filters
+    # --- Apply filters
     def raw_matches_filters(entry: dict) -> bool:
         movie_data = entry.get("movie", entry)
 
@@ -264,7 +251,7 @@ def query_user_trakt_list(
     # Filter before doing extra requests
     filtered_data = [entry for entry in data if raw_matches_filters(entry)]
     
-    # 3) Convert returned movies to Pydantic Movie models
+    # --- Convert returned movies to Pydantic Movie models
     movies: List[Movie] = []
     for entry in filtered_data[:limit]:
         movie_data = entry.get("movie", entry)  # unwrap if needed
@@ -355,16 +342,12 @@ def query_user_trakt_list(
         movies.append(Movie(**mapped))
 
 
-    # -----------------------------
-    # 4) Apply sorting
-    # -----------------------------
+    # --- Apply sorting
     if sort_by:
         try:
             movies.sort(key=lambda m: getattr(m, sort_by) or 0, reverse=True)
         except AttributeError:
             pass  # ignore invalid sort_by fields
 
-    # -----------------------------
-    # 5) Return Pydantic MovieList
-    # -----------------------------
+    # --- Return Pydantic MovieList
     return MovieList(movies=movies)
