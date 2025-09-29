@@ -28,7 +28,7 @@ action_dict = {
     "GetTrending": {
         "description": "Get current popular movies.",
         "immediate_args": {
-            "num": "int (opt)"
+            "num": "int (opt) default = 5"
         },
         "immediate_arg_notes": None,
         "follow_up_func": None,
@@ -98,11 +98,7 @@ action_dict = {
             "mode": "(opt)",
         },
         "immediate_arg_notes": None,
-        "follow_up_args": {
-            "title": "(req)",
-            # "trakt_id": "(opt)",
-            "mode": "(opt)",
-        },
+        "follow_up_args": None,
         "follow_up_func": None,
         "final_func": AddOrRemoveFromWatchList.add_or_remove_from_watchlist,
         "final_arg_notes": None

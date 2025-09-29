@@ -24,6 +24,7 @@ class AddOrRemoveFromWatchList:
     def add_or_remove_from_watchlist(
         title: str = None,
         trakt_id: int = None,
+        year: int = None,
         mode: Literal["add", "remove"] = "add",
         target_list: Literal["watchlist", "collection", "ratings", "history", "comments"] = "watchlist",
     ) -> dict:
@@ -50,6 +51,9 @@ class AddOrRemoveFromWatchList:
                 ),
                 "action_prompt": "Tell the user no action can be performed without a movie title.",
             }
+            
+        if title and year:
+            title = f"{title} ({str(year)})"
 
         # Call the update_trakt_list function
         result: TraktListActionResult = update_trakt_list(

@@ -26,6 +26,7 @@ with gr.Blocks(
             min-width: 0 !important;
             flex-basis: 0 !important;
         }
+        .progress-text { display: none !important; })
         #video-column-wrapper {
             transition: all 0.3s ease;
             min-width: 0 !important;
@@ -55,8 +56,8 @@ with gr.Blocks(
     
     gr.Markdown("# 🎬 Movie Agent")
 
-    get_login_tab()
-    with gr.Tab("Step 2: Chat + Trakt Setup"):
-        get_chat_tab()
+    # get_login_tab()
+    # with gr.Tab("Step 2: Chat + Trakt Setup"):
+    get_chat_tab()
 
 demo.launch()

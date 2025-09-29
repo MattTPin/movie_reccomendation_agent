@@ -42,7 +42,7 @@ class GetTrending:
 
     @staticmethod
     def get_trending(
-        num: int = 3,
+        num: int = 5,
         source: Literal["tmdb", "omdb", "trakt"] = "trakt",
     ) -> MovieList:
         """
@@ -248,8 +248,9 @@ class GetMovieDetails:
         
 class GetRelatedMovies:
     action_prompt_template = """
-        You are a helpful movie information agent. You will be provided with a JSON list
-        of movies similar to '{+title+}', which the user is interested in.
+        You are a helpful movie information agent. Do not comment on the movie the user asked
+        about in the previous message. You will be provided with a JSON list of movies that you
+        will provide info about in a neatly formatted list.
 
         For each movie, write a short, engaging summary using only the data in the JSON.
 
