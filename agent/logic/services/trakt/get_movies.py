@@ -203,10 +203,18 @@ def search_trakt_movie(
                     )["movie"] for m in close_matches[:5]
                 ]
             )
+            
+            # return {
+            #     "status": "multiple_candidates",
+            #     "movie": None,
+            #     "potential_matches": movie_list,
+            #     "match_score": None
+            # }
+            
             return {
-                "status": "multiple_candidates",
-                "movie": None,
-                "potential_matches": movie_list,
+                "status": "match",
+                "movie": movie_list.movies[0],
+                "potential_matches": [],
                 "match_score": None
             }
 

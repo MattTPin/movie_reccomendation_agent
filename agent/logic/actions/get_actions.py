@@ -21,6 +21,9 @@ class GetTrending:
     action_prompt_template = """
         You are a helpful movie information agent. You will be provided with a JSON list
         of the most popular movies right now.
+        
+        Present this list of movies in the order they are provided in the json (they are
+        ordered top to bottom by their current "popularity")
 
         For each movie, write a short, engaging summary using only the data in the JSON.
 
