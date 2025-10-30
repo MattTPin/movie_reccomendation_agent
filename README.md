@@ -24,7 +24,7 @@ TRAKT_CLIENT_ID=<your_trakt_client_id>
 TRAKT_CLIENT_SECRET=<your_trakt_client_secret>
 TRAKT_ACCESS_TOKEN=<your_trakt_access_token>
 
-# Langchain API model / Keys
+# LangChain API model / Keys
 ANTHROPIC_API_KEY=<REPLACE_ME>
 ANTHROPIC_MODEL_ID=claude-sonnet-4-5-20250929
 ```
@@ -33,7 +33,7 @@ ANTHROPIC_MODEL_ID=claude-sonnet-4-5-20250929
 
 ### API KEYS
 
-1. Obtain API Keys (for use with Langchain + Anthropic)
+1. Obtain API Keys (for use with LangChain + Anthropic)
 
 ### Trakt.tv
 
@@ -47,42 +47,49 @@ ANTHROPIC_MODEL_ID=claude-sonnet-4-5-20250929
    - Client ID → TRAKT_CLIENT_ID
    - Client Secret → TRAKT_CLIENT_SECRET
 
-#### Get an Access token
-1. Open this URL in your browser (replace <CLIENT_ID>):
-   https://trakt.tv/oauth/authorize?response_type=code&client_id=<CLIENT_ID>&redirect_uri=http://localhost:8080
+#### Get an Access Token
+1. Open this URL in your browser (replace `<CLIENT_ID>`):
+
+- `https://trakt.tv/oauth/authorize?response_type=code&client_id=<CLIENT_ID>&redirect_uri=http://localhost:8080`
+
 
 2. Approve access when prompted.
 
 3. You’ll be redirected to:
-   - http://localhost:8080/?code=`<CODE>`
-   - Copy the value of `<CODE>`→ this is your Authorization Code
+
+- `http://localhost:8080/?code=<CODE>`
+
+- Copy the value of `<CODE>` → this is your Authorization Code
 
 4. Exchange it for an Access Token with this command:
 
-   ```
-   curl -X POST "https://api.trakt.tv/oauth/token" \
-        -H "Content-Type: application/json" \
-        -d '{
-          "code": "<ACCESS_CODE>",
-          "client_id": "<TRAKT_CLIENT_ID>",
-          "client_secret": "<TRAKT_CLIENT_SECRET>",
-          "redirect_uri": "http://localhost:8080",
-          "grant_type": "authorization_code"
-        }'
-    ```
+```
+curl -X POST "https://api.trakt.tv/oauth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "<ACCESS_CODE>",
+    "client_id": "<TRAKT_CLIENT_ID>",
+    "client_secret": "<TRAKT_CLIENT_SECRET>",
+    "redirect_uri": "http://localhost:8080",
+    "grant_type": "authorization_code"
+  }'
+```
 
 5. The response will contain:
-   {
-     "access_token": "<YOUR_TRAKT_ACCESS_TOKEN>",
-     "token_type": "bearer",
-     "expires_in": 7889238,
-     ...
-   }
-   - Copy "access_token" → TRAKT_ACCESS_TOKEN
 
+```
+{
+"access_token": "<YOUR_TRAKT_ACCESS_TOKEN>",
+"token_type": "bearer",
+"expires_in": 7889238,
+...
+}
+```
 
-## Configure and run project
-    
+- Copy `"access_token"` → TRAKT_ACCESS_TOKEN
+
+## Configure and Run Project
+ 
 ### 1. Clone the repo:
 ```bash
 git clone https://github.com/MattTPin/movie_reccomendation_agent
@@ -90,11 +97,9 @@ cd movie_reccomendation_agent
 ```
 
 ### 2. Create a .env file:
+# Copy .env.template → .env
+# Paste your credentials into .env
 
-```bash
-- Copy .env.template → .env
-- Paste your credentials into .env
-```
 
 ### 3. Create a virtual environment (recommended: venv):
 ```bash
@@ -116,30 +121,23 @@ python app.py
 ### 6. Open your browser and go to `http://127.0.0.1:7860`
 The chatbot should now be running. Access it in your internet browser!
 
-
 ## Features & Actions
 
-The chatbot can perform several key actions when prompted with natural language that see it interfacing with the **Trakt.tv API** to generate a response with accurate information:
+The chatbot can perform several key actions when prompted with natural language, interfacing with the **Trakt.tv API** to generate accurate responses:
 
 ### `GetTrending`
 - **Description**: Get a list of current popular movies.
----
 
 ### `GetDetails`
-- **Description**: Get detailed information about a specific movie.  
-
----
+- **Description**: Get detailed information about a specific movie.
 
 ### `GetSimilar`
 - **Description**: Get movies similar to a provided title.
 
----
 ### `GetUserList`
 - **Description**: Retrieve user-specific lists from Trakt.tv (e.g., watchlist, ratings, history).  
 - **Args**:  
-  - `list_type (str, required)` → one of `['watchlist','collection','ratings','history']`.  
+- `list_type (str, required)` → one of `['watchlist','collection','ratings','history']`.
 
----
 ### `AddOrRemoveFromWatchList`
-- **Description**: Update the user’s Trakt.tv watchlist by adding or removing a single movie.  
----
+- **Description**: Update the user’s Trakt.tv watchlist by adding or removing a single movie.
