@@ -204,19 +204,13 @@ def search_trakt_movie(
                 ]
             )
             
-            # return {
-            #     "status": "multiple_candidates",
-            #     "movie": None,
-            #     "potential_matches": movie_list,
-            #     "match_score": None
-            # }
-            
             return {
-                "status": "match",
-                "movie": movie_list.movies[0],
-                "potential_matches": [],
-                "match_score": None
+                "status": "multiple_candidates",
+                "movie": None,
+                "potential_matches": movie_list,
+                "match_score": 1.0
             }
+        
 
     # -- Select single best match
     trakt_id = best_movie["ids"].get("trakt")

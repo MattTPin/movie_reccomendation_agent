@@ -2,11 +2,6 @@
 from typing import Literal, List, Optional, Tuple
 
 from agent.models import Movie, MovieList, TraktListActionResult, generate_system_prompt_from_model_instance
-from agent.logic.services.tmdb import (
-    _get_genre_map,
-    get_tmdb_movie,
-    query_tmdb_trending_movies
-)
 from agent.logic.services.trakt.get_movies import (
     query_top_trakt_movies,
     search_trakt_movie,
@@ -37,30 +32,20 @@ class GetTrending:
         genres, tagline, or director as flavor text—not bullet points.
         
         If a trailer is provided always put the raw url as the last line for that movie.
-
-        Here is an example of the input json.
-
-        {+json+}
     """
 
     @staticmethod
     def get_trending(
         num: int = 5,
-        source: Literal["tmdb", "omdb", "trakt"] = "trakt",
     ) -> MovieList:
         """
         Returns a MovieList Pydantic object populated with
         the top‐`num` trending TMDb results.
         """
         movie_list = query_top_trakt_movies(num)
-        action_prompt = generate_system_prompt_from_model_instance(
-            action_prompt_template=GetTrending.action_prompt_template,
-            model_instance=movie_list
-        )
-
         return {
-            "model_instance": movie_list,
-            "action_prompt": action_prompt
+            "movie_list": movie_list,
+            "action_prompt": GetTrending.action_prompt_template
         }
 
 
@@ -92,7 +77,7 @@ class GetMovieDetails:
 
         Does this look like the movie you were asking about?
 
-        - "{title}" - ({year})
+        - "{title}" (Trakt.tv ID {trakt_id} (if included)) - ({year})
         - (any other included json fields on their own line)
     """
     
@@ -131,9 +116,9 @@ class GetMovieDetails:
         json entry.
         
         Provide the list to the user and present them as potential candidates, asking if any of them
-        are what the user meant. Don't display trakt id.
+        are what the user meant. ALWAYS list the trakt_id alongside the movie title.
         
-        Be sure to list the movie title AND its year.
+        Be sure to list the movie title, it's year, AND its trakt_id.
     """
     
     error_prompt_with_title = """gent. A user tried searching for a movie with the title {+title}
@@ -152,7 +137,6 @@ class GetMovieDetails:
         title: str = None,
         year: int = None,
         trakt_id: int = None,
-        source: Literal["tmdb", "omdb", "trakt"] = "trakt",
         call_type: Literal["follow_up", "final"] = "final",
     ) -> dict:
         """
@@ -165,14 +149,12 @@ class GetMovieDetails:
                 "model_instance": Movie(title="no title provided"),
                 "action_prompt": GetMovieDetails.error_prompt_no_title,
             })
-        if source == "trakt":
-            query_result = query_trakt_movie(
-                trakt_id = trakt_id,
-                title = title,
-                year = year,
-            )
-        
-        print("query_result is", query_result, "\n-------")
+            
+        query_result = query_trakt_movie(
+            trakt_id = trakt_id,
+            title = title,
+            year = year,
+        )
         
         if query_result['status'] == "multiple_candidates":
             if call_type == "follow_up":
@@ -223,7 +205,7 @@ class GetMovieDetails:
                 }
 
         elif query_result['status'] == "match":
-            if query_result['match_score'] > 0.6:
+            if query_result.get('match_score', 0) > 0.6:
                 # A proper match has been found!
                 prompt = generate_system_prompt_from_model_instance(
                     action_prompt_template=GetMovieDetails.action_prompt_template,
