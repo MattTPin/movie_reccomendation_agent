@@ -14,7 +14,6 @@ from agent.interface.login_tab import get_login_tab
 
 from agent import config
 
-
 with gr.Blocks(
     css="""
         /* Make chatbot fill available vertical space */
